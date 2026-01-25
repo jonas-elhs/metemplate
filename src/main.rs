@@ -1,3 +1,7 @@
+mod config;
+
+use crate::config::Config;
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -5,6 +9,7 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 }
+
 #[derive(Subcommand)]
 enum Commands {
     List {
@@ -19,8 +24,9 @@ enum Commands {
     },
 }
 
-fn main() {
+fn run() -> Result<()> {
     let cli = Cli::parse();
+    let config = Config::load("/home/jonas/dev/metemplate/config")?;
 
     match cli.command {
         Commands::List { project } => {
@@ -29,5 +35,15 @@ fn main() {
         Commands::Generate { project, values } => {
             println!("Generated project: '{}', values: '{}'", project, values)
         }
+    }
+
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = run() {
+        eprintln!("{:#}", err);
+
+        std::process::exit(1);
     }
 }
