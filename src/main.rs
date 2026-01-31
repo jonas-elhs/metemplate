@@ -1,7 +1,9 @@
 mod config;
+mod generate;
 mod list;
 
 use crate::config::Config;
+use crate::generate::generate;
 use crate::list::list;
 use anyhow::Result;
 use clap::{ArgGroup, Parser, Subcommand};
@@ -42,8 +44,8 @@ enum Commands {
         random: bool,
 
         /// Only generate these templates
-        #[arg(short, long, num_args = 1.., value_name = "TEMPLATES")]
-        templates: Vec<String>,
+        #[arg(short, long, value_name = "TEMPLATES")]
+        templates: Option<String>,
     },
 }
 
@@ -56,15 +58,9 @@ fn run() -> Result<()> {
         Commands::Generate {
             project,
             values,
-            random,
+            random: _,
             templates,
-        } => {
-            println!(
-                "Generated project: '{}', values: '{}'",
-                project,
-                values.unwrap_or("random".into())
-            )
-        }
+        } => generate(project, values, templates, &config)?,
     }
 
     Ok(())
