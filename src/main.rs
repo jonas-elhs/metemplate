@@ -1,6 +1,8 @@
 mod config;
+mod list;
 
 use crate::config::Config;
+use crate::list::list;
 use anyhow::Result;
 use clap::{ArgGroup, Parser, Subcommand};
 
@@ -50,9 +52,7 @@ fn run() -> Result<()> {
     let config = Config::load("/home/jonas/dev/metemplate/config")?;
 
     match cli.command {
-        Commands::List { project } => {
-            println!("Listed '{}'", project.unwrap_or_else(|| "null".into()))
-        }
+        Commands::List { project } => list(project, &config),
         Commands::Generate {
             project,
             values,
