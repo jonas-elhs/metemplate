@@ -47,15 +47,14 @@ pub struct Config {
 
 impl Config {
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+        let mut projects = fs::read_dir(&path)?
+            .map(|entry| load_project(entry?.path()))
+            .collect::<Result<Vec<Project>>>()?;
+        projects.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+
         Ok(Self {
             path: path.as_ref().into(),
-            projects: fs::read_dir(path)?
-                .map(|entry| {
-                    let entry = entry?;
-
-                    load_project(entry.path())
-                })
-                .collect::<Result<Vec<Project>>>()?,
+            projects,
         })
     }
 }
@@ -75,7 +74,7 @@ fn load_project(path: PathBuf) -> Result<Project> {
 
     // Templates
     let templates_path = path.join("templates");
-    let templates = config
+    let mut templates: Vec<Template> = config
         .templates
         .iter()
         .map(|(name, template_config)| {
@@ -92,23 +91,21 @@ fn load_project(path: PathBuf) -> Result<Project> {
                 })?,
             })
         })
-        .collect::<Result<Vec<Template>>>()?;
+        .collect::<Result<_>>()?;
+    templates.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
     // Values
     let values_path = path.join("values");
-    let values: Vec<Values> = fs::read_dir(&values_path)
+    let mut values: Vec<Values> = fs::read_dir(&values_path)
         .with_context(|| {
             format!(
                 "Failed to read values directory at path '{}'",
                 values_path.display(),
             )
         })?
-        .map(|entry| {
-            let entry = entry?;
-
-            load_values(entry.path())
-        })
-        .collect::<Result<Vec<Values>>>()?;
+        .map(|entry| load_values(entry?.path()))
+        .collect::<Result<_>>()?;
+    values.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
     Ok(Project {
         name: project_name,
