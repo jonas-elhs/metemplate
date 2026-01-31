@@ -2,9 +2,10 @@ mod config;
 
 use crate::config::Config;
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 
 #[derive(Parser)]
+#[command(version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -12,15 +13,35 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// List available projects or available project values
     List {
         /// Project to list the possible values for
+        #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
     },
+
+    /// Generate template files
+    #[command(
+        group(
+            ArgGroup::new("target")
+                .required(true)
+                .args(["values", "random"])
+        )
+    )]
     Generate {
         /// Project to generate the templates from
         project: String,
+
         /// Values to supply to the templates
-        values: String,
+        values: Option<String>,
+
+        /// Pick a random values file
+        #[arg(short, long)]
+        random: bool,
+
+        /// Only generate these templates
+        #[arg(short, long, num_args = 1.., value_name = "TEMPLATES")]
+        templates: Vec<String>,
     },
 }
 
@@ -32,8 +53,17 @@ fn run() -> Result<()> {
         Commands::List { project } => {
             println!("Listed '{}'", project.unwrap_or_else(|| "null".into()))
         }
-        Commands::Generate { project, values } => {
-            println!("Generated project: '{}', values: '{}'", project, values)
+        Commands::Generate {
+            project,
+            values,
+            random,
+            templates,
+        } => {
+            println!(
+                "Generated project: '{}', values: '{}'",
+                project,
+                values.unwrap_or("random".into())
+            )
         }
     }
 
