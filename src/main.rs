@@ -52,7 +52,7 @@ fn run() -> Result<()> {
     let config = Config::load("/home/jonas/dev/metemplate/config")?;
 
     match cli.command {
-        Commands::List { project } => list(project, &config),
+        Commands::List { project } => list(project, &config)?,
         Commands::Generate {
             project,
             values,

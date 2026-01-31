@@ -1,6 +1,7 @@
 use crate::config::{Config, Projects};
+use anyhow::{Result, anyhow};
 
-pub fn list(project_name: Option<String>, config: &Config) {
+pub fn list(project_name: Option<String>, config: &Config) -> Result<()> {
     let projects: Projects = config
         .projects
         .iter()
@@ -13,13 +14,11 @@ pub fn list(project_name: Option<String>, config: &Config) {
         .collect();
 
     if projects.is_empty() {
-        if let Some(project_name) = project_name {
-            println!("No project named '{}' found", project_name);
+        return Err(anyhow!(if let Some(project_name) = project_name {
+            format!("No project named '{}' found!", project_name)
         } else {
-            println!("No projects found");
-        }
-
-        return;
+            "No projects found".into()
+        }));
     }
 
     for (index, (project_name, project)) in projects.iter().enumerate() {
@@ -43,4 +42,6 @@ pub fn list(project_name: Option<String>, config: &Config) {
             println!("  {}─ {}", prefix, name);
         }
     }
+
+    Ok(())
 }
