@@ -1,16 +1,16 @@
-use crate::config::Config;
-use crate::config::Project;
+use crate::config::{Config, Projects};
 
 pub fn list(project_name: Option<String>, config: &Config) {
-    let projects: Vec<&Project> = if let Some(name) = project_name.as_ref() {
-        config
-            .projects
-            .iter()
-            .filter(|project| project.name == *name)
-            .collect()
-    } else {
-        config.projects.iter().collect()
-    };
+    let projects: Projects = config
+        .projects
+        .iter()
+        .filter(|(name, _)| {
+            project_name
+                .as_ref()
+                .is_none_or(|project_name| project_name == *name)
+        })
+        .map(|(name, project)| (name.clone(), project.clone()))
+        .collect();
 
     if projects.is_empty() {
         if let Some(project_name) = project_name {
@@ -22,13 +22,13 @@ pub fn list(project_name: Option<String>, config: &Config) {
         return;
     }
 
-    for (index, project) in projects.iter().enumerate() {
+    for (index, (project_name, project)) in projects.iter().enumerate() {
         if index > 0 {
             println!();
         }
 
         // Print project name
-        println!("{}", project.name);
+        println!("{}", project_name);
 
         // Print values
         let mut values_names_iter = project.values.keys().peekable();

@@ -31,22 +31,21 @@ pub type ValuesData = HashMap<String, String>;
 pub type Values = BTreeMap<String, ValuesData>;
 #[derive(Debug, Clone)]
 pub struct Project {
-    pub name: String,
     pub templates: Vec<Template>,
     pub values: Values,
 }
+pub type Projects = BTreeMap<String, Project>;
 #[derive(Debug)]
 pub struct Config {
-    pub projects: Vec<Project>,
+    pub projects: Projects,
     pub path: PathBuf,
 }
 
 impl Config {
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
-        let mut projects = fs::read_dir(&path)?
+        let projects: Projects = fs::read_dir(&path)?
             .map(|entry| load_project(entry?.path()))
-            .collect::<Result<Vec<Project>>>()?;
-        projects.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+            .collect::<Result<_>>()?;
 
         Ok(Self {
             path: path.as_ref().into(),
@@ -55,7 +54,7 @@ impl Config {
     }
 }
 
-fn load_project(path: PathBuf) -> Result<Project> {
+fn load_project(path: PathBuf) -> Result<(String, Project)> {
     // Name
     let project_name = path.file_name().unwrap().to_string_lossy().to_string();
 
@@ -102,11 +101,7 @@ fn load_project(path: PathBuf) -> Result<Project> {
         .map(|entry| load_values(entry?.path()))
         .collect::<Result<_>>()?;
 
-    Ok(Project {
-        name: project_name,
-        templates,
-        values,
-    })
+    Ok((project_name, Project { templates, values }))
 }
 
 fn load_values(path: PathBuf) -> Result<(String, ValuesData)> {
