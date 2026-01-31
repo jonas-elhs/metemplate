@@ -69,15 +69,22 @@ fn load_project(path: PathBuf) -> Result<(String, Project)> {
 
     // Templates
     let templates_path = path.join("templates");
+    let home_dir =
+        dirs_next::home_dir().ok_or_else(|| anyhow!("Could not determine home directory!"))?;
     let mut templates: Vec<Template> = config
         .templates
         .iter()
         .map(|(name, template_config)| {
             let template_path = templates_path.join(&template_config.file);
 
+            let mut out = template_config.out.clone();
+            if out.starts_with("~") {
+                out = home_dir.join(out.strip_prefix("~").unwrap())
+            }
+
             Ok(Template {
                 name: name.to_string(),
-                out: template_config.out.clone(),
+                out,
                 contents: fs::read_to_string(&template_path).with_context(|| {
                     format!(
                         "Failed to read template file at path '{}'",
