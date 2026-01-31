@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -27,17 +27,13 @@ pub struct Template {
     pub contents: String,
     pub out: PathBuf,
 }
-type ValuesData = HashMap<String, String>;
-#[derive(Debug, Clone)]
-pub struct Values {
-    pub name: String,
-    pub data: ValuesData,
-}
+pub type ValuesData = HashMap<String, String>;
+pub type Values = BTreeMap<String, ValuesData>;
 #[derive(Debug, Clone)]
 pub struct Project {
     pub name: String,
     pub templates: Vec<Template>,
-    pub values: Vec<Values>,
+    pub values: Values,
 }
 #[derive(Debug)]
 pub struct Config {
@@ -96,7 +92,7 @@ fn load_project(path: PathBuf) -> Result<Project> {
 
     // Values
     let values_path = path.join("values");
-    let mut values: Vec<Values> = fs::read_dir(&values_path)
+    let values: Values = fs::read_dir(&values_path)
         .with_context(|| {
             format!(
                 "Failed to read values directory at path '{}'",
@@ -105,7 +101,6 @@ fn load_project(path: PathBuf) -> Result<Project> {
         })?
         .map(|entry| load_values(entry?.path()))
         .collect::<Result<_>>()?;
-    values.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
     Ok(Project {
         name: project_name,
@@ -114,7 +109,7 @@ fn load_project(path: PathBuf) -> Result<Project> {
     })
 }
 
-fn load_values(path: PathBuf) -> Result<Values> {
+fn load_values(path: PathBuf) -> Result<(String, ValuesData)> {
     let values_name = path.file_stem().unwrap().to_string_lossy().to_string();
     let values_file: ValuesFile = read_toml(&path)
         .with_context(|| format!("Failed to read values file at path '{}'", path.display()))?;
@@ -127,11 +122,11 @@ fn load_values(path: PathBuf) -> Result<Values> {
                 .vars
                 .get(&value)
                 .ok_or_else(|| {
-                    anyhow!(format!(
+                    anyhow!(
                         "Data '{}' not defined in values file at path '{}'",
                         value,
                         path.display()
-                    ))
+                    )
                 })?
                 .clone();
 
@@ -139,10 +134,7 @@ fn load_values(path: PathBuf) -> Result<Values> {
         })
         .collect::<Result<ValuesData>>()?;
 
-    Ok(Values {
-        name: values_name,
-        data,
-    })
+    Ok((values_name, data))
 }
 
 fn read_toml<T: DeserializeOwned>(path: &Path) -> Result<T> {

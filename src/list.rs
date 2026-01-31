@@ -27,14 +27,20 @@ pub fn list(project_name: Option<String>, config: &Config) {
             println!();
         }
 
+        // Print project name
         println!("{}", project.name);
 
-        if let Some((last, rest)) = project.values.split_last() {
-            for value in rest {
-                println!("  ├─ {}", value.name);
-            }
+        // Print values
+        let mut values_names_iter = project.values.keys().peekable();
 
-            println!("  └─ {}", last.name);
+        while let Some(name) = values_names_iter.next() {
+            let prefix = if values_names_iter.peek().is_some() {
+                "├"
+            } else {
+                "└"
+            };
+
+            println!("  {}─ {}", prefix, name);
         }
     }
 }
