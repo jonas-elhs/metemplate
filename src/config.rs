@@ -1,3 +1,4 @@
+use crate::cli::Cli;
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -41,9 +42,15 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn load(cli: &Cli) -> Result<Self> {
+        let config_directory = cli
+            .config
+            .clone()
+            .or_else(|| dirs_next::config_dir().map(|dir| dir.join("metemplate")))
+            .ok_or_else(|| anyhow!("Could not find config directory!"))?;
+
         Ok(Self {
-            projects: fs::read_dir(&path)?
+            projects: fs::read_dir(&config_directory)?
                 .map(|entry| load_project(entry?.path()))
                 .collect::<Result<_>>()?,
         })

@@ -1,10 +1,14 @@
 use clap::{ArgGroup, Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+
+    #[arg(short, long, value_name = "PATH")]
+    pub config: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]

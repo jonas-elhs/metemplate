@@ -12,7 +12,7 @@ use clap::Parser;
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
-    let config = Config::load("/home/jonas/dev/metemplate/config")?;
+    let config = Config::load(&cli)?;
 
     match cli.command {
         Commands::List { project } => list(project, &config)?,
