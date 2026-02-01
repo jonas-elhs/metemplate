@@ -14,6 +14,7 @@ struct TemplateConfig {
 }
 #[derive(Debug, Deserialize)]
 pub struct ProjectConfig {
+    values: Option<Vec<String>>,
     templates: HashMap<String, TemplateConfig>,
 }
 #[derive(Debug, Deserialize)]
@@ -113,18 +114,19 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
                 values_path.display(),
             )
         })?
-        .map(|entry| load_values(entry?.path()))
+        .map(|entry| load_values(&entry?.path(), &config))
         .collect::<Result<_>>()?;
 
     Ok((project_name, Project { templates, values }))
 }
 
-fn load_values(path: PathBuf) -> Result<(String, ValuesData)> {
+fn load_values(path: &Path, config: &ProjectConfig) -> Result<(String, ValuesData)> {
     let values_name = path.file_stem().unwrap().to_string_lossy().to_string();
-    let values_file: ValuesFile = read_toml(&path)
+    let values_file: ValuesFile = read_toml(path)
         .with_context(|| format!("Failed to read values file at path '{}'", path.display()))?;
 
-    let data = values_file
+    // Resolve values from vars section
+    let data: ValuesData = values_file
         .values
         .into_iter()
         .map(|(key, value)| {
@@ -143,6 +145,44 @@ fn load_values(path: PathBuf) -> Result<(String, ValuesData)> {
             Ok((key, resolved_value))
         })
         .collect::<Result<_>>()?;
+
+    // Validate values
+    if let Some(required_values) = config.values.as_ref() {
+        // Find missing values
+        let missing_values: Vec<_> = required_values
+            .iter()
+            .filter(|key| !data.contains_key(*key))
+            .map(|key| key.as_str())
+            .collect();
+
+        // Find extra values
+        let extra_values: Vec<_> = data
+            .keys()
+            .filter(|key| !required_values.contains(*key))
+            .map(|key| key.as_str())
+            .collect();
+
+        if !missing_values.is_empty() || !extra_values.is_empty() {
+            let mut msg = String::new();
+
+            if !missing_values.is_empty() {
+                msg.push_str(&format!(
+                    "Missing keys in values file at path '{}': {}",
+                    path.display(),
+                    missing_values.join(", ")
+                ));
+            }
+            if !extra_values.is_empty() {
+                msg.push_str(&format!(
+                    "Unspecified keys in values file at path '{}': {}",
+                    path.display(),
+                    extra_values.join(", ")
+                ));
+            }
+
+            return Err(anyhow!(msg.trim().to_string()));
+        }
+    }
 
     Ok((values_name, data))
 }
