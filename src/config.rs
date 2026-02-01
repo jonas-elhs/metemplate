@@ -42,7 +42,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(cli: &Cli) -> Result<Self> {
+    pub fn parse(cli: &Cli) -> Result<Self> {
         let config_directory = cli
             .config
             .clone()
