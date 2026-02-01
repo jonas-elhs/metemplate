@@ -15,16 +15,14 @@ fn run() -> Result<()> {
     let config = Config::parse(&cli)?;
 
     match cli.command {
-        Commands::List { project } => list(project, &config)?,
+        Commands::List { project } => list(project, &config),
         Commands::Generate {
             project,
             values,
-            random: _,
-            templates,
-        } => generate(project, values, templates, &config)?,
+            random: _, // inferred in generate() by values being None
+            template,
+        } => generate(project, values, template, &config),
     }
-
-    Ok(())
 }
 
 fn main() {

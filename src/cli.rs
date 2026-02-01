@@ -16,14 +16,14 @@ pub enum Commands {
     /// List available projects or available project values
     List {
         /// Project to list the possible values for
-        #[arg(short, long, value_name = "PROJECT")]
+        #[arg(short, long, value_name = "NAME")]
         project: Option<String>,
     },
 
     /// Generate template files
     #[command(
         group(
-            ArgGroup::new("target")
+            ArgGroup::new("values_source")
                 .required(true)
                 .args(["values", "random"])
         )
@@ -33,14 +33,15 @@ pub enum Commands {
         project: String,
 
         /// Values to supply to the templates
+        #[arg(short, long, value_name = "NAME")]
         values: Option<String>,
 
         /// Pick a random values file
         #[arg(short, long)]
         random: bool,
 
-        /// Only generate these templates
-        #[arg(short, long, value_name = "TEMPLATES")]
-        templates: Option<String>,
+        /// Only generate this template
+        #[arg(short, long, value_name = "NAME")]
+        template: Option<String>,
     },
 }

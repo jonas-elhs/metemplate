@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+// Parsed files
 #[derive(Debug, Deserialize)]
 struct TemplateConfig {
     out: PathBuf,
@@ -22,6 +23,7 @@ pub struct ValuesFile {
     vars: HashMap<String, String>,
 }
 
+// Runtime representation
 #[derive(Debug, Clone)]
 pub struct Template {
     pub name: String,
@@ -47,17 +49,19 @@ impl Config {
             .config
             .clone()
             .or_else(|| dirs_next::config_dir().map(|dir| dir.join("metemplate")))
-            .ok_or_else(|| anyhow!("Could not find config directory!"))?;
+            .ok_or_else(|| anyhow!("Could not find config directory"))?;
 
         Ok(Self {
             projects: fs::read_dir(&config_directory)?
-                .map(|entry| load_project(entry?.path()))
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| entry.path().is_dir())
+                .map(|entry| load_project(&entry.path()))
                 .collect::<Result<_>>()?,
         })
     }
 }
 
-fn load_project(path: PathBuf) -> Result<(String, Project)> {
+fn load_project(path: &Path) -> Result<(String, Project)> {
     // Name
     let project_name = path.file_name().unwrap().to_string_lossy().to_string();
 
@@ -73,21 +77,22 @@ fn load_project(path: PathBuf) -> Result<(String, Project)> {
     // Templates
     let templates_path = path.join("templates");
     let home_dir =
-        dirs_next::home_dir().ok_or_else(|| anyhow!("Could not determine home directory!"))?;
+        dirs_next::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
     let mut templates: Vec<Template> = config
         .templates
         .iter()
         .map(|(name, template_config)| {
             let template_path = templates_path.join(&template_config.file);
 
+            // Expand home directory
             let mut out = template_config.out.clone();
             if out.starts_with("~") {
                 out = home_dir.join(out.strip_prefix("~").unwrap())
             }
 
             Ok(Template {
-                name: name.to_string(),
                 out,
+                name: name.clone(),
                 contents: fs::read_to_string(&template_path).with_context(|| {
                     format!(
                         "Failed to read template file at path '{}'",
@@ -97,7 +102,7 @@ fn load_project(path: PathBuf) -> Result<(String, Project)> {
             })
         })
         .collect::<Result<_>>()?;
-    templates.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    templates.sort_by(|a, b| a.name.cmp(&b.name));
 
     // Values
     let values_path = path.join("values");
@@ -119,7 +124,7 @@ fn load_values(path: PathBuf) -> Result<(String, ValuesData)> {
     let values_file: ValuesFile = read_toml(&path)
         .with_context(|| format!("Failed to read values file at path '{}'", path.display()))?;
 
-    let data: ValuesData = values_file
+    let data = values_file
         .values
         .into_iter()
         .map(|(key, value)| {
@@ -137,14 +142,16 @@ fn load_values(path: PathBuf) -> Result<(String, ValuesData)> {
 
             Ok((key, resolved_value))
         })
-        .collect::<Result<ValuesData>>()?;
+        .collect::<Result<_>>()?;
 
     Ok((values_name, data))
 }
 
 fn read_toml<T: DeserializeOwned>(path: &Path) -> Result<T> {
-    let contents = fs::read_to_string(path)?;
-    let parsed = toml::from_str(&contents)?;
+    let contents = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read file '{}'", path.display()))?;
+    let parsed = toml::from_str(&contents)
+        .with_context(|| format!("Failed to parse TOML in '{}'", path.display()))?;
 
     Ok(parsed)
 }

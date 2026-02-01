@@ -14,19 +14,23 @@ pub fn generate(
     let project = match config.projects.get(&project_name) {
         Some(project) => project,
         None => {
-            return Err(anyhow!("No project named '{}' found!", project_name));
+            return Err(anyhow!("No project named '{}' found", project_name));
         }
     };
 
     // If 'values_name' is not passed, choose a random one
-    let values_name = values_name.unwrap_or_else(|| {
-        project
+    if project.values.is_empty() {
+        return Err(anyhow!("Project '{}' has no values", project_name));
+    }
+    let values_name = match values_name {
+        Some(name) => name,
+        None => project
             .values
             .keys()
             .choose(&mut rand::rng())
             .unwrap()
-            .clone()
-    });
+            .clone(),
+    };
     // Retrieve values
     let values = match project.values.get(&values_name) {
         Some(values) => values,
@@ -50,18 +54,34 @@ pub fn generate(
         })
         .collect();
 
+    if templates.is_empty() {
+        return match template_name {
+            Some(ref name) => Err(anyhow!(
+                "No template named '{}' found in project '{}'",
+                name,
+                project_name
+            )),
+            None => Err(anyhow!("No templates found")),
+        };
+    }
+
     // Generate all templates
+    let template_regex = Regex::new(r"\{\{([^\{\\\s]+)\}\}").unwrap();
     for template in templates {
-        generate_template(template, values, &values_name)?;
+        generate_template(&template_regex, template, values, &values_name)?;
+
         println!("Generated template '{}'", &template.name);
     }
 
     Ok(())
 }
 
-fn generate_template(template: &Template, values: &ValuesData, values_name: &String) -> Result<()> {
-    let regex = Regex::new(r"\{\{([^\{\\\s]+)\}\}").unwrap();
-
+fn generate_template(
+    regex: &Regex,
+    template: &Template,
+    values: &ValuesData,
+    values_name: &str,
+) -> Result<()> {
     // Fill out template
     let mut missing_keys: Vec<String> = Vec::new();
     let result = regex
@@ -77,23 +97,20 @@ fn generate_template(template: &Template, values: &ValuesData, values_name: &Str
             }
         })
         .to_string();
+
+    // Report missing keys
     if !missing_keys.is_empty() {
         return Err(anyhow!(
-            "Could not find {} '{}' in values '{}'!",
-            if missing_keys.len() == 1 {
-                "key"
-            } else {
-                "keys"
-            },
-            missing_keys.join("', '"),
-            values_name
+            "Could not find keys in values '{}': {}",
+            values_name,
+            missing_keys.join(", "),
         ));
     }
 
     // Write template
     fs::write(&template.out, result).with_context(|| {
         format!(
-            "Could not write template '{}' to '{}'!",
+            "Failed to write template '{}' to '{}'",
             template.name,
             template.out.display()
         )
