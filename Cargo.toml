@@ -2,6 +2,7 @@
 name = "metemplate"
 version = "0.1.0"
 edition = "2024"
+description = "A dead simple but functional templating engine"
 
 [dependencies]
 anyhow = "1.0.100"
