@@ -108,13 +108,15 @@ fn generate_template(
     }
 
     // Write template
-    fs::write(&template.out, result).with_context(|| {
-        format!(
-            "Failed to write template '{}' to '{}'",
-            template.name,
-            template.out.display()
-        )
-    })?;
+    for path in &template.out {
+        fs::write(path, &result).with_context(|| {
+            format!(
+                "Failed to write template '{}' to '{}'",
+                template.name,
+                path.display()
+            )
+        })?;
+    }
 
     Ok(())
 }

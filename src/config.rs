@@ -1,7 +1,6 @@
 use crate::cli::Cli;
 use anyhow::{Context, Result, anyhow};
-use serde::Deserialize;
-use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,7 +8,8 @@ use std::path::{Path, PathBuf};
 // Parsed files
 #[derive(Debug, Deserialize)]
 struct TemplateConfig {
-    out: PathBuf,
+    #[serde(deserialize_with = "single_or_vec")]
+    out: Vec<PathBuf>,
     file: PathBuf,
 }
 #[derive(Debug, Deserialize)]
@@ -29,7 +29,7 @@ pub struct ValuesFile {
 pub struct Template {
     pub name: String,
     pub contents: String,
-    pub out: PathBuf,
+    pub out: Vec<PathBuf>,
 }
 pub type ValuesData = HashMap<String, String>;
 pub type Values = BTreeMap<String, ValuesData>;
@@ -86,10 +86,17 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
             let template_path = templates_path.join(&template_config.file);
 
             // Expand home directory
-            let mut out = template_config.out.clone();
-            if out.starts_with("~") {
-                out = home_dir.join(out.strip_prefix("~").unwrap())
-            }
+            let out: Vec<PathBuf> = template_config
+                .out
+                .iter()
+                .map(|path| {
+                    if path.starts_with("~") {
+                        home_dir.join(path.strip_prefix("~").unwrap())
+                    } else {
+                        path.clone()
+                    }
+                })
+                .collect();
 
             Ok(Template {
                 out,
@@ -194,4 +201,22 @@ fn read_toml<T: DeserializeOwned>(path: &Path) -> Result<T> {
         .with_context(|| format!("Failed to parse TOML in '{}'", path.display()))?;
 
     Ok(parsed)
+}
+
+fn single_or_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany<T> {
+        One(T),
+        Many(Vec<T>),
+    }
+
+    match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::One(v) => Ok(vec![v]),
+        OneOrMany::Many(v) => Ok(v),
+    }
 }

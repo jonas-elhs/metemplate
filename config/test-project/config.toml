@@ -2,4 +2,4 @@ values = [ "test" ]
 
 [templates.test-template]
 file = "test-template.txt"
-out = "~/test.txt"
+out = [ "~/test.txt", "~/test2.txt" ]
