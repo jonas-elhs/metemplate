@@ -13,12 +13,12 @@ struct TemplateConfig {
     file: PathBuf,
 }
 #[derive(Debug, Deserialize)]
-pub struct ProjectConfig {
+struct ProjectConfig {
     values: Option<Vec<String>>,
     templates: HashMap<String, TemplateConfig>,
 }
 #[derive(Debug, Deserialize)]
-pub struct ValuesFile {
+struct ValuesFile {
     #[serde(flatten)]
     values: HashMap<String, String>,
     vars: HashMap<String, String>,
