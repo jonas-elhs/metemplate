@@ -81,26 +81,26 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
         dirs_next::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
     let mut templates: Vec<Template> = config
         .templates
-        .iter()
+        .into_iter()
         .map(|(name, template_config)| {
-            let template_path = templates_path.join(&template_config.file);
+            let template_path = templates_path.join(template_config.file);
 
             // Expand home directory
             let out: Vec<PathBuf> = template_config
                 .out
-                .iter()
+                .into_iter()
                 .map(|path| {
                     if path.starts_with("~") {
                         home_dir.join(path.strip_prefix("~").unwrap())
                     } else {
-                        path.clone()
+                        path
                     }
                 })
                 .collect();
 
             Ok(Template {
                 out,
-                name: name.clone(),
+                name,
                 contents: fs::read_to_string(&template_path).with_context(|| {
                     format!(
                         "Failed to read template file at path '{}'",
@@ -121,13 +121,13 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
                 values_path.display(),
             )
         })?
-        .map(|entry| load_values(&entry?.path(), &config))
+        .map(|entry| load_values(&entry?.path(), &config.values))
         .collect::<Result<_>>()?;
 
     Ok((project_name, Project { templates, values }))
 }
 
-fn load_values(path: &Path, config: &ProjectConfig) -> Result<(String, ValuesData)> {
+fn load_values(path: &Path, values: &Option<Vec<String>>) -> Result<(String, ValuesData)> {
     let values_name = path.file_stem().unwrap().to_string_lossy().to_string();
     let values_file: ValuesFile = read_toml(path)
         .with_context(|| format!("Failed to read values file at path '{}'", path.display()))?;
@@ -154,7 +154,7 @@ fn load_values(path: &Path, config: &ProjectConfig) -> Result<(String, ValuesDat
         .collect::<Result<_>>()?;
 
     // Validate values
-    if let Some(required_values) = config.values.as_ref() {
+    if let Some(required_values) = values.as_ref() {
         // Find missing values
         let missing_values: Vec<_> = required_values
             .iter()
