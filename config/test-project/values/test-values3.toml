@@ -1,4 +1,4 @@
-test = "testData3"
+test = "$testData3"
 
 [vars]
 testData3 = "yellow"

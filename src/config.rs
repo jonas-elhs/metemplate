@@ -21,6 +21,7 @@ struct ProjectConfig {
 struct ValuesFile {
     #[serde(flatten)]
     values: HashMap<String, String>,
+    #[serde(default)]
     vars: HashMap<String, String>,
 }
 
@@ -137,17 +138,26 @@ fn load_values(path: &Path, values: &Option<Vec<String>>) -> Result<(String, Val
         .values
         .into_iter()
         .map(|(key, value)| {
-            let resolved_value = values_file
-                .vars
-                .get(&value)
-                .ok_or_else(|| {
-                    anyhow!(
-                        "Data '{}' not defined in values file at path '{}'",
-                        value,
-                        path.display()
-                    )
-                })?
-                .clone();
+            // If the value starts with a '$' it is a var
+            let resolved_value = if let Some(var) = value.strip_prefix("$") {
+                values_file
+                    .vars
+                    .get(var)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Data '{}' not defined in values file at path '{}'",
+                            var,
+                            path.display()
+                        )
+                    })?
+                    .clone()
+            // If the value starts with a '\$' it should be a literal dollar sign
+            } else if let Some(rest) = value.strip_prefix("\\$") {
+                format!("${}", rest)
+            // Otherwise it is a literal value
+            } else {
+                value
+            };
 
             Ok((key, resolved_value))
         })
