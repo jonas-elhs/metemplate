@@ -15,7 +15,7 @@ fn run() -> Result<()> {
     let config = Config::parse(&cli)?;
 
     match cli.command {
-        Commands::List { project } => list(project, &config),
+        Commands::List { project, no_values } => list(project, no_values, &config),
         Commands::Generate {
             project,
             values,

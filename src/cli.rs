@@ -15,9 +15,13 @@ pub struct Cli {
 pub enum Commands {
     /// List available projects or available project values
     List {
-        /// Project to list the possible values for
+        /// Project to list available values for
         #[arg(short, long, value_name = "NAME")]
         project: Option<String>,
+
+        /// Do not print available values for each project
+        #[arg(short = 'V', long)]
+        no_values: bool,
     },
 
     /// Generate template files

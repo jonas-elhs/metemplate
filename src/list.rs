@@ -1,7 +1,7 @@
 use crate::config::Config;
 use anyhow::{Result, anyhow};
 
-pub fn list(project_name: Option<String>, config: &Config) -> Result<()> {
+pub fn list(project_name: Option<String>, no_values: bool, config: &Config) -> Result<()> {
     let projects = config.projects.iter().filter(|(name, _)| {
         project_name
             .as_ref()
@@ -12,24 +12,26 @@ pub fn list(project_name: Option<String>, config: &Config) -> Result<()> {
     for (index, (project_name, project)) in projects.enumerate() {
         found = true;
 
-        if index > 0 {
+        if !no_values && index > 0 {
             println!();
         }
 
         // Print project name
         println!("{}", project_name);
 
-        // Print values in a tree shape
-        let mut values_names_iter = project.values.keys().peekable();
+        if !no_values {
+            // Print values in a tree shape
+            let mut values_names_iter = project.values.keys().peekable();
 
-        while let Some(name) = values_names_iter.next() {
-            let prefix = if values_names_iter.peek().is_some() {
-                "├"
-            } else {
-                "└"
-            };
+            while let Some(name) = values_names_iter.next() {
+                let prefix = if values_names_iter.peek().is_some() {
+                    "├"
+                } else {
+                    "└"
+                };
 
-            println!("  {}─ {}", prefix, name);
+                println!("  {}─ {}", prefix, name);
+            }
         }
     }
 
