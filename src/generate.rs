@@ -109,10 +109,20 @@ fn generate_template(
 
     // Write template
     for path in &template.out {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).with_context(|| {
+                format!(
+                    "Failed to create output directory for template '{}' at '{}'",
+                    &template.name,
+                    parent.display(),
+                )
+            })?;
+        }
+
         fs::write(path, &result).with_context(|| {
             format!(
                 "Failed to write template '{}' to '{}'",
-                template.name,
+                &template.name,
                 path.display()
             )
         })?;
