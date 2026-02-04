@@ -20,5 +20,10 @@
       default = self.packages.${pkgs.stdenv.system}.metemplate;
       metemplate = pkgs.callPackage ./nix/package.nix {};
     });
+
+    homeManagerModules = {
+      default = self.homeManagerModules.metemplate;
+      metemplate = import ./nix/home-manager.nix {inherit self;};
+    };
   };
 }
