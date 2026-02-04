@@ -3,15 +3,11 @@
     nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-unstable";
 
     systems.url = "github:nix-systems/default";
-
-    fenix.url = "github:nix-community/fenix";
-    fenix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = {
     self,
     nixpkgs,
-    fenix,
     systems,
   }: let
     inherit (nixpkgs) lib;
@@ -22,14 +18,8 @@
       pkgs = nixpkgs.legacyPackages.${system};
 
       info = lib.importTOML ./Cargo.toml;
-
-      inherit (fenix.packages.${system}.minimal) toolchain;
-      rustPlatform = pkgs.makeRustPlatform {
-        cargo = toolchain;
-        rustc = toolchain;
-      };
     in {
-      metemplate = rustPlatform.buildRustPackage {
+      metemplate = pkgs.rustPlatform.buildRustPackage {
         pname = "metemplate";
         inherit (info.package) version;
 
