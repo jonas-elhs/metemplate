@@ -16,24 +16,9 @@
       lib.genAttrs (import systems)
       (system: f nixpkgs.legacyPackages.${system});
   in {
-    packages = eachSystem (pkgs: let
-      info = lib.importTOML ./Cargo.toml;
-    in {
-      metemplate = pkgs.rustPlatform.buildRustPackage {
-        pname = "metemplate";
-        inherit (info.package) version;
-
-        src = ./.;
-        cargoLock = {lockFile = ./Cargo.lock;};
-
-        meta = {
-          inherit (info.package) description;
-          homepage = "https://github.com/jonas-elhs/metemplate";
-          license = lib.licenses.mit;
-        };
-      };
-
+    packages = eachSystem (pkgs: {
       default = self.packages.${pkgs.stdenv.system}.metemplate;
+      metemplate = pkgs.callPackage ./nix/package.nix {};
     });
   };
 }
