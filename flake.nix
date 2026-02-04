@@ -12,11 +12,11 @@
   }: let
     inherit (nixpkgs) lib;
 
-    eachSystem = lib.genAttrs (import systems);
+    eachSystem = f:
+      lib.genAttrs (import systems)
+      (system: f nixpkgs.legacyPackages.${system});
   in {
-    packages = eachSystem (system: let
-      pkgs = nixpkgs.legacyPackages.${system};
-
+    packages = eachSystem (pkgs: let
       info = lib.importTOML ./Cargo.toml;
     in {
       metemplate = pkgs.rustPlatform.buildRustPackage {
@@ -33,7 +33,7 @@
         };
       };
 
-      default = self.packages.${system}.metemplate;
+      default = self.packages.${pkgs.stdenv.system}.metemplate;
     });
   };
 }
