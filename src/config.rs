@@ -50,7 +50,7 @@ impl Config {
         let config_directory = cli
             .config
             .clone()
-            .or_else(|| dirs_next::config_dir().map(|dir| dir.join("metemplate")))
+            .or_else(|| dirs::config_dir().map(|dir| dir.join("metemplate")))
             .ok_or_else(|| anyhow!("Could not find config directory"))?;
 
         Ok(Self {
@@ -78,8 +78,7 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
 
     // Templates
     let templates_path = path.join("templates");
-    let home_dir =
-        dirs_next::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
+    let home_dir = dirs::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
     let mut templates: Vec<Template> = config
         .templates
         .into_iter()
