@@ -87,9 +87,11 @@ fn generate_template(
     let result = regex
         .replace_all(&template.contents, |captures: &regex::Captures| {
             let key = &captures[1];
+            let trimmed = key.trim_start_matches("-");
+            let dash_count = key.len() - trimmed.len();
 
-            match values.get(key) {
-                Some(value) => value,
+            match values.get(trimmed) {
+                Some(value) => remove_prefix(value, dash_count),
                 None => {
                     missing_keys.push(key.into());
                     ""
@@ -129,4 +131,14 @@ fn generate_template(
     }
 
     Ok(())
+}
+
+fn remove_prefix(string: &str, amount: usize) -> &str {
+    let byte_index = string
+        .char_indices()
+        .nth(amount)
+        .map(|(index, _)| index)
+        .unwrap_or(string.len());
+
+    &string[byte_index..]
 }
