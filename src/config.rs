@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 struct TemplateConfig {
     #[serde(deserialize_with = "single_or_vec")]
     out: Vec<PathBuf>,
-    file: PathBuf,
+    file: Option<PathBuf>,
 }
 #[derive(Debug, Deserialize)]
 struct ProjectConfig {
@@ -83,7 +83,12 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
         .templates
         .into_iter()
         .map(|(name, template_config)| {
-            let template_path = templates_path.join(template_config.file);
+            // Template file equals the name if not supplied
+            let template_file = match template_config.file {
+                Some(file) => file,
+                None => name.clone().into(),
+            };
+            let template_path = templates_path.join(template_file);
 
             // Expand home directory
             let out: Vec<PathBuf> = template_config
