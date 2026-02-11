@@ -1,2 +1,4 @@
+# START MARKER
 test-template-file
 {{test}}
+# END MARKER

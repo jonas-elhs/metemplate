@@ -3,3 +3,4 @@ values = [ "test" ]
 [templates.test-template]
 file = "test-template.txt"
 out = [ "~/bogus/test.txt", "~/test2.txt" ]
+mode = "append"

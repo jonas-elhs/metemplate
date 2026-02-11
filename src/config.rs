@@ -6,11 +6,21 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 // Parsed files
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TemplateMode {
+    #[default]
+    Replace,
+    Append,
+    Prepend,
+}
 #[derive(Debug, Deserialize)]
 struct TemplateConfig {
     #[serde(deserialize_with = "single_or_vec")]
     out: Vec<PathBuf>,
     file: Option<PathBuf>,
+    #[serde(default)]
+    mode: TemplateMode,
 }
 #[derive(Debug, Deserialize)]
 struct ProjectConfig {
@@ -26,15 +36,16 @@ struct ValuesFile {
 }
 
 // Runtime representation
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Template {
     pub name: String,
     pub contents: String,
     pub out: Vec<PathBuf>,
+    pub mode: TemplateMode,
 }
 pub type ValuesData = HashMap<String, String>;
 pub type Values = BTreeMap<String, ValuesData>;
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Project {
     pub templates: Vec<Template>,
     pub values: Values,
@@ -112,6 +123,7 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
                         template_path.display()
                     )
                 })?,
+                mode: template_config.mode,
             })
         })
         .collect::<Result<_>>()?;

@@ -1,8 +1,9 @@
-use crate::config::{Config, Template, ValuesData};
+use crate::config::{Config, Template, TemplateMode, ValuesData};
 use anyhow::{Context, Result, anyhow};
 use rand::seq::IteratorRandom;
 use regex::Regex;
 use std::fs;
+use std::path::Path;
 
 pub fn generate(
     project_name: String,
@@ -121,16 +122,79 @@ fn generate_template(
             })?;
         }
 
-        fs::write(path, &result).with_context(|| {
-            format!(
-                "Failed to write template '{}' to '{}'",
-                &template.name,
-                path.display()
-            )
-        })?;
+        let contents = match template.mode {
+            TemplateMode::Replace => &result,
+            TemplateMode::Append => &format!(
+                "{}{}",
+                clean_template(path, &result, &template.name)?,
+                result
+            ),
+            TemplateMode::Prepend => &format!(
+                "{}{}",
+                result,
+                clean_template(path, &result, &template.name)?
+            ),
+        };
+
+        write_template(&template.name, path, contents)?;
     }
 
     Ok(())
+}
+
+fn write_template(template_name: &str, path: &Path, contents: &str) -> Result<()> {
+    fs::write(path, contents).with_context(|| {
+        format!(
+            "Failed to write template '{}' to '{}'",
+            template_name,
+            path.display()
+        )
+    })
+}
+
+fn clean_template(path: &Path, template: &str, template_name: &str) -> Result<String> {
+    if !path.exists() {
+        return Ok(String::new());
+    }
+
+    let file_contents = fs::read_to_string(path).with_context(|| {
+        format!(
+            "Failed to read existing template out file: {}",
+            path.display()
+        )
+    })?;
+
+    // Retrieve template start and end markers
+    let mut template_lines = template.lines();
+    let template_start_line = template_lines
+        .next()
+        .with_context(|| format!("Template can not be empty: {}", template_name))?;
+    let template_end_line = template_lines
+        .last()
+        .with_context(|| format!("Template has only one line: {}", template_name))?;
+
+    // Remove already generated template
+    let mut result = String::new();
+    let mut skipping = false;
+
+    for line in file_contents.lines() {
+        if !skipping && line == template_start_line {
+            skipping = true;
+            continue;
+        }
+
+        if skipping && line == template_end_line {
+            skipping = false;
+            continue;
+        }
+
+        if !skipping {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+
+    Ok(result)
 }
 
 fn remove_prefix(string: &str, amount: usize) -> &str {
