@@ -67,7 +67,7 @@ pub fn generate(
     }
 
     // Generate all templates
-    let template_regex = Regex::new(r"\{\{([^\{\\\s]+)\}\}").unwrap();
+    let template_regex = Regex::new(r"\{\{([^\\\n]+)\}\}").unwrap();
     for template in templates {
         generate_template(&template_regex, template, values, &values_name)?;
 
@@ -87,15 +87,21 @@ fn generate_template(
     let mut missing_keys: Vec<String> = Vec::new();
     let result = regex
         .replace_all(&template.contents, |captures: &regex::Captures| {
-            let key = &captures[1];
+            let key = captures[1].trim();
+
+            if key.split_whitespace().count() != 1 {
+                return format!("{{{{{}}}}}", &captures[1]);
+            }
+
             let trimmed = key.trim_start_matches("-");
             let dash_count = key.len() - trimmed.len();
 
             match values.get(trimmed) {
-                Some(value) => remove_prefix(value, dash_count),
+                Some(value) => remove_prefix(value, dash_count).to_string(),
                 None => {
                     missing_keys.push(key.into());
-                    ""
+
+                    String::new()
                 }
             }
         })
