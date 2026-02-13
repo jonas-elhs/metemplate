@@ -19,9 +19,10 @@ fn run() -> Result<()> {
         Commands::Generate {
             project,
             values,
-            random: _, // inferred in generate() by values being None
+            random, // inferred in generate() by values being None
             template,
-        } => generate(project, values, template, &config),
+            value_overrides,
+        } => generate(project, values, value_overrides, random, template, &config),
     }
 }
 

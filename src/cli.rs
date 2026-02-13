@@ -1,4 +1,4 @@
-use clap::{ArgGroup, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -25,13 +25,6 @@ pub enum Commands {
     },
 
     /// Generate template files
-    #[command(
-        group(
-            ArgGroup::new("values_source")
-                .required(true)
-                .args(["values", "random"])
-        )
-    )]
     Generate {
         /// Project to generate the templates from
         project: String,
@@ -47,5 +40,24 @@ pub enum Commands {
         /// Only generate this template
         #[arg(short, long, value_name = "NAME")]
         template: Option<String>,
+
+        /// Override value manually
+        #[arg(
+            short = 's',
+            long = "set",
+            value_name = "KEY=VALUE",
+            value_parser = parse_key_val
+        )]
+        value_overrides: Vec<(String, String)>,
     },
+}
+
+fn parse_key_val(s: &str) -> Result<(String, String), String> {
+    let (key, value) = s.split_once('=').ok_or("expected KEY=VALUE")?;
+
+    if key.is_empty() {
+        return Err("Key cannot be empty".into());
+    }
+
+    Ok((key.to_string(), value.to_string()))
 }

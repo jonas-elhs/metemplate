@@ -2,12 +2,15 @@ use crate::config::{Config, Template, TemplateMode, ValuesData};
 use anyhow::{Context, Result, anyhow};
 use rand::seq::IteratorRandom;
 use regex::Regex;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 pub fn generate(
     project_name: String,
     values_name: Option<String>,
+    value_overrides: Vec<(String, String)>,
+    random_values: bool,
     template_name: Option<String>,
     config: &Config,
 ) -> Result<()> {
@@ -23,26 +26,46 @@ pub fn generate(
     if project.values.is_empty() {
         return Err(anyhow!("Project '{}' has no values", project_name));
     }
-    let values_name = match values_name {
-        Some(name) => name,
-        None => project
-            .values
-            .keys()
-            .choose(&mut rand::rng())
-            .unwrap()
-            .clone(),
-    };
+    let values_name = values_name.unwrap_or_else(|| {
+        if random_values {
+            project
+                .values
+                .keys()
+                .choose(&mut rand::rng())
+                .cloned()
+                .unwrap()
+        } else {
+            String::new()
+        }
+    });
+
     // Retrieve values
-    let values = match project.values.get(&values_name) {
-        Some(values) => values,
-        None => {
+    let mut values = if values_name.is_empty() {
+        if value_overrides.is_empty() {
             return Err(anyhow!(
-                "No values named '{}' found in project '{}'",
-                values_name,
-                project_name,
+                "Either a values name (--values) or the random flag (--random) has to be passed"
             ));
         }
+
+        HashMap::new()
+    } else {
+        project
+            .values
+            .get(&values_name)
+            .ok_or_else(|| {
+                anyhow!(
+                    "No values named '{}' found in project '{}'",
+                    values_name,
+                    project_name,
+                )
+            })?
+            .clone()
     };
+
+    // Override values
+    for (value_name, value) in value_overrides {
+        values.insert(value_name, value);
+    }
 
     // Either take passed template or all
     let templates: Vec<_> = project
@@ -69,7 +92,7 @@ pub fn generate(
     // Generate all templates
     let template_regex = Regex::new(r"\{\{([^\\\n]+)\}\}").unwrap();
     for template in templates {
-        generate_template(&template_regex, template, values, &values_name)?;
+        generate_template(&template_regex, template, &values, &values_name)?;
 
         println!("Generated template '{}'", &template.name);
     }
@@ -99,7 +122,7 @@ fn generate_template(
             match values.get(trimmed) {
                 Some(value) => remove_prefix(value, dash_count).to_string(),
                 None => {
-                    missing_keys.push(key.into());
+                    missing_keys.push(trimmed.into());
 
                     String::new()
                 }
