@@ -1,4 +1,6 @@
 test = "$testData"
+test2 = "red2"
 
 [vars]
 testData = "red"
+aff = "tetst"

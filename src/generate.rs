@@ -5,6 +5,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 pub fn generate(
     project_name: String,
@@ -90,9 +91,8 @@ pub fn generate(
     }
 
     // Generate all templates
-    let template_regex = Regex::new(r"\{\{([^\\\n]+)\}\}").unwrap();
     for template in templates {
-        generate_template(&template_regex, template, &values, &values_name)?;
+        generate_template(template, &values, &values_name)?;
 
         println!("Generated template '{}'", &template.name);
     }
@@ -100,44 +100,22 @@ pub fn generate(
     Ok(())
 }
 
-fn generate_template(
-    regex: &Regex,
-    template: &Template,
-    values: &ValuesData,
-    values_name: &str,
-) -> Result<()> {
-    // Fill out template
-    let mut missing_keys: Vec<String> = Vec::new();
-    let result = regex
-        .replace_all(&template.contents, |captures: &regex::Captures| {
-            let key = captures[1].trim();
+static TEMPLATE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{\{\s*([^\s]+)\s*\}\}").unwrap());
+static REPEAT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^<\{\s*repeat\s+([^\s]+)\s*\}>$").unwrap());
+static ENDREPEAT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^<\{\s*endrepeat\s*\}>$").unwrap());
 
-            if key.split_whitespace().count() != 1 {
-                return format!("{{{{{}}}}}", &captures[1]);
-            }
-
-            let trimmed = key.trim_start_matches("-");
-            let dash_count = key.len() - trimmed.len();
-
-            match values.get(trimmed) {
-                Some(value) => remove_prefix(value, dash_count).to_string(),
-                None => {
-                    missing_keys.push(trimmed.into());
-
-                    String::new()
-                }
-            }
-        })
-        .to_string();
-
-    // Report missing keys
-    if !missing_keys.is_empty() {
-        return Err(anyhow!(
-            "Could not find keys in values '{}': {}",
-            values_name,
-            missing_keys.join(", "),
-        ));
+fn generate_template(template: &Template, values: &ValuesData, values_name: &str) -> Result<()> {
+    // repeat
+    let mut repeated_template = template.contents.clone();
+    while REPEAT_REGEX.is_match(&repeated_template) {
+        repeated_template = fill_repeat_template(repeated_template, values, &template.name)?;
     }
+
+    // Fill out template
+    let filled = fill_template(&repeated_template, values, values_name)?;
 
     // Write template
     for path in &template.out {
@@ -152,16 +130,16 @@ fn generate_template(
         }
 
         let contents = match template.mode {
-            TemplateMode::Replace => &result,
+            TemplateMode::Replace => &filled,
             TemplateMode::Append => &format!(
                 "{}{}",
-                clean_template(path, &result, &template.name)?,
-                result
+                clean_template(path, &filled, &template.name)?,
+                filled
             ),
             TemplateMode::Prepend => &format!(
                 "{}{}",
-                result,
-                clean_template(path, &result, &template.name)?
+                filled,
+                clean_template(path, &filled, &template.name)?
             ),
         };
 
@@ -221,6 +199,116 @@ fn clean_template(path: &Path, template: &str, template_name: &str) -> Result<St
             result.push_str(line);
             result.push('\n');
         }
+    }
+
+    Ok(result)
+}
+
+fn fill_repeat_template(
+    template: String,
+    values: &ValuesData,
+    template_name: &str,
+) -> Result<String> {
+    for (start_index, line) in template.clone().lines().enumerate() {
+        if let Some(captures) = REPEAT_REGEX.captures(line) {
+            let mut end_index: usize = 0;
+            for (index2, line2) in template.lines().skip(start_index + 1).enumerate() {
+                if REPEAT_REGEX.is_match(line2) {
+                    return Err(anyhow!(
+                        "Repeat statement inside repeat statement not allowed. First in line '{}', second in line '{}'",
+                        start_index + 1,
+                        start_index + index2 + 2
+                    ));
+                }
+
+                if ENDREPEAT_REGEX.is_match(line2) {
+                    end_index = start_index + index2 + 1;
+
+                    break;
+                }
+            }
+
+            if end_index == 0 {
+                return Err(anyhow!(
+                    "No endrepeat statement found after repeat statement in line '{}' in template '{}'",
+                    start_index + 1,
+                    template_name
+                ));
+            }
+
+            println!("{} -> {}", start_index, end_index);
+
+            let repeat_lines = template
+                .lines()
+                .skip(start_index + 1)
+                .take(end_index - start_index - 1)
+                .collect::<Vec<&str>>()
+                .join("\n");
+
+            let insert_lines: Vec<String> = values
+                .iter()
+                .map(|(value_key, value_value)| {
+                    let repeat_values: HashMap<String, String> = [
+                        ("key".to_string(), value_key.clone()),
+                        ("value".to_string(), value_value.clone()),
+                    ]
+                    .into();
+
+                    fill_template(&repeat_lines, &repeat_values, "key,value")
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            return Ok(template
+                .lines()
+                .take(start_index)
+                .map(str::to_owned)
+                .chain(insert_lines)
+                .chain(template.lines().skip(end_index + 1).map(str::to_owned))
+                .collect::<Vec<_>>()
+                .join("\n"));
+        }
+    }
+
+    Ok(template)
+}
+
+fn fill_template(
+    template: &str,
+    value_pool: &HashMap<String, String>,
+    values_name: &str,
+) -> Result<String> {
+    // Fill out template
+    let mut missing_keys: Vec<String> = Vec::new();
+    let result = TEMPLATE_REGEX
+        .replace_all(template, |captures: &regex::Captures| {
+            let key = &captures[1];
+
+            if key.split_whitespace().count() != 1 {
+                // '{{' in a format string equals '{' so this returns '{{THE CAPTURE}}' essentially doing nothing
+                return format!("{{{{{}}}}}", &captures[1]);
+            }
+
+            let trimmed = key.trim_start_matches("-");
+            let dash_count = key.len() - trimmed.len();
+
+            match value_pool.get(trimmed) {
+                Some(value) => remove_prefix(value, dash_count).to_string(),
+                None => {
+                    missing_keys.push(trimmed.into());
+
+                    String::new()
+                }
+            }
+        })
+        .to_string();
+
+    // Report missing keys
+    if !missing_keys.is_empty() {
+        return Err(anyhow!(
+            "Could not find keys in values '{}': {}",
+            values_name,
+            missing_keys.join(", "),
+        ));
     }
 
     Ok(result)

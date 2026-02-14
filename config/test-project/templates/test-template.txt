@@ -1,4 +1,17 @@
 # START MARKER
+
+
+<{ repeat value }>
+${{key}} = rgba({{value}}ee)
+<{ endrepeat }>
+
 test-template-file
 {{test}}
+
+<{ repeat vars }>
+tstesetst
+{{key}} = "{{value}}"
+<{ endrepeat }>
+
+
 # END MARKER
