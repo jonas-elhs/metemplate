@@ -1,7 +1,7 @@
 # START MARKER
 
 
-<{ repeat value }>
+<{ repeat values }>
 ${{key}} = rgba({{value}}ee)
 <{ endrepeat }>
 
@@ -9,8 +9,8 @@ test-template-file
 {{test}}
 
 <{ repeat vars }>
-tstesetst
-{{key}} = "{{value}}"
+{{key}}:
+  - "{{value}}"
 <{ endrepeat }>
 
 

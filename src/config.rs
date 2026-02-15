@@ -43,12 +43,15 @@ pub struct Template {
     pub out: Vec<PathBuf>,
     pub mode: TemplateMode,
 }
-pub type ValuesData = HashMap<String, String>;
-pub type Values = BTreeMap<String, ValuesData>;
+#[derive(Debug, Clone)]
+pub struct Values {
+    pub data: HashMap<String, String>,
+    pub vars: HashMap<String, String>,
+}
 #[derive(Debug)]
 pub struct Project {
     pub templates: Vec<Template>,
-    pub values: Values,
+    pub values: BTreeMap<String, Values>,
 }
 pub type Projects = BTreeMap<String, Project>;
 #[derive(Debug)]
@@ -131,7 +134,7 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
 
     // Values
     let values_path = path.join("values");
-    let values: Values = fs::read_dir(&values_path)
+    let values = fs::read_dir(&values_path)
         .with_context(|| {
             format!(
                 "Failed to read values directory at path '{}'",
@@ -144,13 +147,13 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
     Ok((project_name, Project { templates, values }))
 }
 
-fn load_values(path: &Path, values: &Option<Vec<String>>) -> Result<(String, ValuesData)> {
+fn load_values(path: &Path, values: &Option<Vec<String>>) -> Result<(String, Values)> {
     let values_name = path.file_stem().unwrap().to_string_lossy().to_string();
     let values_file: ValuesFile = read_toml(path)
         .with_context(|| format!("Failed to read values file at path '{}'", path.display()))?;
 
     // Resolve values from vars section
-    let data: ValuesData = values_file
+    let values_data: HashMap<String, String> = values_file
         .values
         .into_iter()
         .map(|(key, value)| {
@@ -184,12 +187,12 @@ fn load_values(path: &Path, values: &Option<Vec<String>>) -> Result<(String, Val
         // Find missing values
         let missing_values: Vec<_> = required_values
             .iter()
-            .filter(|key| !data.contains_key(*key))
+            .filter(|key| !values_data.contains_key(*key))
             .map(|key| key.as_str())
             .collect();
 
         // Find extra values
-        let extra_values: Vec<_> = data
+        let extra_values: Vec<_> = values_data
             .keys()
             .filter(|key| !required_values.contains(*key))
             .map(|key| key.as_str())
@@ -217,7 +220,13 @@ fn load_values(path: &Path, values: &Option<Vec<String>>) -> Result<(String, Val
         }
     }
 
-    Ok((values_name, data))
+    Ok((
+        values_name,
+        Values {
+            data: values_data,
+            vars: values_file.vars,
+        },
+    ))
 }
 
 fn read_toml<T: DeserializeOwned>(path: &Path) -> Result<T> {

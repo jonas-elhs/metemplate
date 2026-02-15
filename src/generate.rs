@@ -1,4 +1,4 @@
-use crate::config::{Config, Template, TemplateMode, ValuesData};
+use crate::config::{Config, Template, TemplateMode, Values};
 use anyhow::{Context, Result, anyhow};
 use rand::seq::IteratorRandom;
 use regex::Regex;
@@ -54,7 +54,10 @@ pub fn generate(
             ));
         }
 
-        HashMap::new()
+        Values {
+            data: HashMap::new(),
+            vars: HashMap::new(),
+        }
     } else {
         project.values.get(values_name).cloned().ok_or_else(|| {
             anyhow!(
@@ -67,7 +70,7 @@ pub fn generate(
 
     // Override values
     for (value_name, value) in value_overrides {
-        values.insert(value_name.clone(), value.clone());
+        values.data.insert(value_name.clone(), value.clone());
     }
 
     // Either take passed template or all
@@ -98,7 +101,7 @@ pub fn generate(
     Ok(())
 }
 
-fn generate_template(template: &Template, values: &ValuesData, values_name: &str) -> Result<()> {
+fn generate_template(template: &Template, values: &Values, values_name: &str) -> Result<()> {
     // Expand 'repeat' statements
     let mut repeated_template = template.contents.clone();
     while REPEAT_REGEX.is_match(&repeated_template) {
@@ -106,7 +109,7 @@ fn generate_template(template: &Template, values: &ValuesData, values_name: &str
     }
 
     // Fill template
-    let filled = fill_template(&repeated_template, values, values_name)?;
+    let filled = fill_template(&repeated_template, &values.data, values_name)?;
 
     // Write template
     for path in &template.out {
@@ -195,15 +198,22 @@ fn clean_template(path: &Path, template: &str, template_name: &str) -> Result<St
     Ok(result)
 }
 
-fn expand_repeat_statement(
-    template: &str,
-    values: &ValuesData,
-    template_name: &str,
-) -> Result<String> {
+fn expand_repeat_statement(template: &str, values: &Values, template_name: &str) -> Result<String> {
     let lines: Vec<&str> = template.lines().collect();
 
     for (start_index, line) in lines.iter().enumerate() {
         if let Some(captures) = REPEAT_REGEX.captures(line) {
+            let values_pool = match &captures[1] {
+                "values" => &values.data,
+                "vars" => &values.vars,
+                capture => {
+                    return Err(anyhow!(
+                        "Can only repeat over 'values' or 'vars': Got '{}'",
+                        capture
+                    ));
+                }
+            };
+
             // Find 'endrepeat' statement
             let end_index = lines[start_index + 1..]
                 .iter()
@@ -234,7 +244,7 @@ fn expand_repeat_statement(
             let repeat_content = lines[start_index + 1..end_index].join("\n");
 
             let mut insert_lines = String::new();
-            for (value_key, value_value) in values {
+            for (value_key, value_value) in values_pool {
                 let mut repeat_values = HashMap::with_capacity(2);
                 repeat_values.insert("key".to_string(), value_key.clone());
                 repeat_values.insert("value".to_string(), value_value.clone());
