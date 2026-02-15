@@ -113,16 +113,6 @@ fn generate_template(template: &Template, values: &Values, values_name: &str) ->
 
     // Write template
     for path in &template.out {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).with_context(|| {
-                format!(
-                    "Failed to create output directory for template '{}' at '{}'",
-                    &template.name,
-                    parent.display(),
-                )
-            })?;
-        }
-
         let contents = match template.mode {
             TemplateMode::Replace => &filled,
             TemplateMode::Append => &format!(
@@ -144,10 +134,20 @@ fn generate_template(template: &Template, values: &Values, values_name: &str) ->
 }
 
 fn write_template(template_name: &str, path: &Path, contents: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "Failed to create output directory for template '{}' at '{}'",
+                &template_name,
+                parent.display(),
+            )
+        })?;
+    }
+
     fs::write(path, contents).with_context(|| {
         format!(
             "Failed to write template '{}' to '{}'",
-            template_name,
+            &template_name,
             path.display()
         )
     })
