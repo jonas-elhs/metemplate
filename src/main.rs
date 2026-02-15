@@ -15,14 +15,21 @@ fn run() -> Result<()> {
     let config = Config::parse(&cli)?;
 
     match cli.command {
-        Commands::List { project, no_values } => list(project, no_values, &config),
+        Commands::List { project, no_values } => list(project.as_deref(), no_values, &config),
         Commands::Generate {
             project,
             values,
+            value_overrides,
             random, // inferred in generate() by values being None
             template,
-            value_overrides,
-        } => generate(project, values, value_overrides, random, template, &config),
+        } => generate(
+            &project,
+            values.as_deref(),
+            &value_overrides,
+            random,
+            template.as_deref(),
+            &config,
+        ),
     }
 }
 

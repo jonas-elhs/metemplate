@@ -7,16 +7,23 @@ use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
 
+static TEMPLATE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{\{\s*([^\s]+)\s*\}\}").unwrap());
+static REPEAT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^<\{\s*repeat\s+([^\s]+)\s*\}>$").unwrap());
+static ENDREPEAT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^<\{\s*endrepeat\s*\}>$").unwrap());
+
 pub fn generate(
-    project_name: String,
-    values_name: Option<String>,
-    value_overrides: Vec<(String, String)>,
+    project_name: &str,
+    values_name: Option<&str>,
+    value_overrides: &[(String, String)],
     random_values: bool,
-    template_name: Option<String>,
+    template_name: Option<&str>,
     config: &Config,
 ) -> Result<()> {
     // Retrieve project
-    let project = match config.projects.get(&project_name) {
+    let project = match config.projects.get(project_name) {
         Some(project) => project,
         None => {
             return Err(anyhow!("No project named '{}' found", project_name));
@@ -24,21 +31,20 @@ pub fn generate(
     };
 
     // If 'values_name' is not passed, choose a random one
-    if project.values.is_empty() {
-        return Err(anyhow!("Project '{}' has no values", project_name));
-    }
-    let values_name = values_name.unwrap_or_else(|| {
-        if random_values {
-            project
-                .values
-                .keys()
-                .choose(&mut rand::rng())
-                .cloned()
-                .unwrap()
-        } else {
-            String::new()
-        }
-    });
+    let random_choice: &String;
+    let values_name = if let Some(name) = values_name {
+        name
+    } else if random_values {
+        random_choice = project
+            .values
+            .keys()
+            .choose(&mut rand::rng())
+            .ok_or_else(|| anyhow!("Project '{}' has no values", project_name))?;
+
+        random_choice.as_str()
+    } else {
+        ""
+    };
 
     // Retrieve values
     let mut values = if values_name.is_empty() {
@@ -50,33 +56,25 @@ pub fn generate(
 
         HashMap::new()
     } else {
-        project
-            .values
-            .get(&values_name)
-            .ok_or_else(|| {
-                anyhow!(
-                    "No values named '{}' found in project '{}'",
-                    values_name,
-                    project_name,
-                )
-            })?
-            .clone()
+        project.values.get(values_name).cloned().ok_or_else(|| {
+            anyhow!(
+                "No values named '{}' found in project '{}'",
+                values_name,
+                project_name,
+            )
+        })?
     };
 
     // Override values
     for (value_name, value) in value_overrides {
-        values.insert(value_name, value);
+        values.insert(value_name.clone(), value.clone());
     }
 
     // Either take passed template or all
     let templates: Vec<_> = project
         .templates
         .iter()
-        .filter(|template| {
-            template_name
-                .as_ref()
-                .is_none_or(|name| name == &template.name)
-        })
+        .filter(|template| template_name.is_none_or(|name| name == template.name))
         .collect();
 
     if templates.is_empty() {
@@ -92,7 +90,7 @@ pub fn generate(
 
     // Generate all templates
     for template in templates {
-        generate_template(template, &values, &values_name)?;
+        generate_template(template, &values, values_name)?;
 
         println!("Generated template '{}'", &template.name);
     }
@@ -100,21 +98,14 @@ pub fn generate(
     Ok(())
 }
 
-static TEMPLATE_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{\{\s*([^\s]+)\s*\}\}").unwrap());
-static REPEAT_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)^<\{\s*repeat\s+([^\s]+)\s*\}>$").unwrap());
-static ENDREPEAT_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^<\{\s*endrepeat\s*\}>$").unwrap());
-
 fn generate_template(template: &Template, values: &ValuesData, values_name: &str) -> Result<()> {
-    // repeat
+    // Expand 'repeat' statements
     let mut repeated_template = template.contents.clone();
     while REPEAT_REGEX.is_match(&repeated_template) {
-        repeated_template = fill_repeat_template(repeated_template, values, &template.name)?;
+        repeated_template = expand_repeat_statement(&repeated_template, values, &template.name)?;
     }
 
-    // Fill out template
+    // Fill template
     let filled = fill_template(&repeated_template, values, values_name)?;
 
     // Write template
@@ -204,72 +195,78 @@ fn clean_template(path: &Path, template: &str, template_name: &str) -> Result<St
     Ok(result)
 }
 
-fn fill_repeat_template(
-    template: String,
+fn expand_repeat_statement(
+    template: &str,
     values: &ValuesData,
     template_name: &str,
 ) -> Result<String> {
-    for (start_index, line) in template.clone().lines().enumerate() {
+    let lines: Vec<&str> = template.lines().collect();
+
+    for (start_index, line) in lines.iter().enumerate() {
         if let Some(captures) = REPEAT_REGEX.captures(line) {
-            let mut end_index: usize = 0;
-            for (index2, line2) in template.lines().skip(start_index + 1).enumerate() {
-                if REPEAT_REGEX.is_match(line2) {
-                    return Err(anyhow!(
-                        "Repeat statement inside repeat statement not allowed. First in line '{}', second in line '{}'",
-                        start_index + 1,
-                        start_index + index2 + 2
-                    ));
-                }
-
-                if ENDREPEAT_REGEX.is_match(line2) {
-                    end_index = start_index + index2 + 1;
-
-                    break;
-                }
-            }
-
-            if end_index == 0 {
-                return Err(anyhow!(
+            // Find 'endrepeat' statement
+            let end_index = lines[start_index + 1..]
+                .iter()
+                .position(|line2| ENDREPEAT_REGEX.is_match(line2))
+                .ok_or_else(|| anyhow!(
                     "No endrepeat statement found after repeat statement in line '{}' in template '{}'",
                     start_index + 1,
                     template_name
+                ))? + start_index + 1;
+
+            // Check nested 'repeat' statement
+            if lines[start_index + 1..end_index]
+                .iter()
+                .any(|line2| REPEAT_REGEX.is_match(line2))
+            {
+                let nested_index = lines[start_index + 1..end_index]
+                    .iter()
+                    .position(|line2| REPEAT_REGEX.is_match(line2))
+                    .unwrap();
+
+                return Err(anyhow!(
+                    "Nested repeat statements not allowed. First in line '{}', second in line '{}'",
+                    start_index + 1,
+                    start_index + 1 + nested_index + 1
                 ));
             }
 
-            println!("{} -> {}", start_index, end_index);
+            let repeat_content = lines[start_index + 1..end_index].join("\n");
 
-            let repeat_lines = template
-                .lines()
-                .skip(start_index + 1)
-                .take(end_index - start_index - 1)
-                .collect::<Vec<&str>>()
-                .join("\n");
+            let mut insert_lines = String::new();
+            for (value_key, value_value) in values {
+                let mut repeat_values = HashMap::with_capacity(2);
+                repeat_values.insert("key".to_string(), value_key.clone());
+                repeat_values.insert("value".to_string(), value_value.clone());
 
-            let insert_lines: Vec<String> = values
-                .iter()
-                .map(|(value_key, value_value)| {
-                    let repeat_values: HashMap<String, String> = [
-                        ("key".to_string(), value_key.clone()),
-                        ("value".to_string(), value_value.clone()),
-                    ]
-                    .into();
+                let filled = fill_template(&repeat_content, &repeat_values, "key,value")?;
+                insert_lines.push_str(&filled);
+                insert_lines.push('\n');
+            }
 
-                    fill_template(&repeat_lines, &repeat_values, "key,value")
-                })
-                .collect::<Result<Vec<_>>>()?;
+            // Construct final template
+            let mut result = String::new();
 
-            return Ok(template
-                .lines()
-                .take(start_index)
-                .map(str::to_owned)
-                .chain(insert_lines)
-                .chain(template.lines().skip(end_index + 1).map(str::to_owned))
-                .collect::<Vec<_>>()
-                .join("\n"));
+            // Lines before 'repeat' statement
+            result.push_str(&lines[..start_index].join("\n"));
+
+            // Repeated content
+            if !insert_lines.is_empty() {
+                result.push('\n');
+                result.push_str(insert_lines.trim_end());
+            }
+
+            // Lines after 'repeat' statement
+            if end_index + 1 < lines.len() {
+                result.push('\n');
+                result.push_str(&lines[end_index + 1..].join("\n"));
+            }
+
+            return Ok(result);
         }
     }
 
-    Ok(template)
+    Ok(template.to_string())
 }
 
 fn fill_template(
@@ -294,7 +291,7 @@ fn fill_template(
             match value_pool.get(trimmed) {
                 Some(value) => remove_prefix(value, dash_count).to_string(),
                 None => {
-                    missing_keys.push(trimmed.into());
+                    missing_keys.push(trimmed.to_string());
 
                     String::new()
                 }

@@ -1,7 +1,7 @@
 use crate::config::Config;
 use anyhow::{Result, anyhow};
 
-pub fn list(project_name: Option<String>, no_values: bool, config: &Config) -> Result<()> {
+pub fn list(project_name: Option<&str>, no_values: bool, config: &Config) -> Result<()> {
     let projects = config.projects.iter().filter(|(name, _)| {
         project_name
             .as_ref()
