@@ -21,6 +21,7 @@ struct TemplateConfig {
     file: Option<PathBuf>,
     #[serde(default)]
     mode: TemplateMode,
+    merge_file: Option<PathBuf>,
 }
 #[derive(Debug, Deserialize)]
 struct ProjectConfig {
@@ -42,6 +43,7 @@ pub struct Template {
     pub contents: String,
     pub out: Vec<PathBuf>,
     pub mode: TemplateMode,
+    pub merge_path: Option<PathBuf>,
 }
 #[derive(Debug, Clone)]
 pub struct Values {
@@ -117,16 +119,29 @@ fn load_project(path: &Path) -> Result<(String, Project)> {
                 })
                 .collect();
 
+            // Read template
+            let template_contents = fs::read_to_string(&template_path).with_context(|| {
+                format!(
+                    "Failed to read template file at path '{}'",
+                    template_path.display()
+                )
+            })?;
+
+            // Expand merge file path if it was declared
+            let merge_path = template_config.merge_file.map(|path| {
+                if path.starts_with("~") {
+                    home_dir.join(path.strip_prefix("~").unwrap())
+                } else {
+                    path
+                }
+            });
+
             Ok(Template {
                 out,
                 name,
-                contents: fs::read_to_string(&template_path).with_context(|| {
-                    format!(
-                        "Failed to read template file at path '{}'",
-                        template_path.display()
-                    )
-                })?,
                 mode: template_config.mode,
+                contents: template_contents,
+                merge_path,
             })
         })
         .collect::<Result<_>>()?;

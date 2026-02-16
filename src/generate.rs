@@ -117,13 +117,21 @@ fn generate_template(template: &Template, values: &Values, values_name: &str) ->
             TemplateMode::Replace => &filled,
             TemplateMode::Append => &format!(
                 "{}{}",
-                clean_template(path, &filled, &template.name)?,
+                clean_template(
+                    template.merge_path.as_ref().unwrap_or(path),
+                    &filled,
+                    &template.name
+                )?,
                 filled
             ),
             TemplateMode::Prepend => &format!(
                 "{}{}",
                 filled,
-                clean_template(path, &filled, &template.name)?
+                clean_template(
+                    template.merge_path.as_ref().unwrap_or(path),
+                    &filled,
+                    &template.name,
+                )?
             ),
         };
 
